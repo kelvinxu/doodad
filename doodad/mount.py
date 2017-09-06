@@ -37,6 +37,11 @@ class MountLocal(Mount):
                 filter_ext=('.pyc', '.log', '.git', '.mp4'),
                 filter_dir=('data',),
                 **kwargs):
+        """
+        Args:
+            local_dir : the physical directory on the machine
+            mount_point : the directory that the script see inside of the docker container during runtime
+        """
         super(MountLocal, self).__init__(mount_point=mount_point, **kwargs)
         self.local_dir = os.path.realpath(os.path.expanduser(local_dir))
         self.local_dir_raw = local_dir
