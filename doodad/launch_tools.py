@@ -21,6 +21,7 @@ def launch_python(
     python_cmd='python',
     mode=LOCAL,
     mount_points=None,
+    pdb_post_mortem=False,
     args=None,
     env=None,
     dry=False,
@@ -31,6 +32,9 @@ def launch_python(
         args = {}
     if mount_points is None:
         mount_points = []
+
+    if pdb_post_mortem:
+        python_cmd += ' -m pdb'
 
     # mount
     target_dir = os.path.dirname(target)

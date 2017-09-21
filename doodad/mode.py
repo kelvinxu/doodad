@@ -66,10 +66,14 @@ LOCAL = Local()
 
 
 class DockerMode(LaunchMode):
-    def __init__(self, image='ubuntu:16.04'):
+    def __init__(self, image='ubuntu:16.04', visible_gpu_devices=[]):
+        """
+        visible_gpu_devices : should be the number of gpus that is visible to the program
+        """
         super(DockerMode, self).__init__()
         self.docker_image = image
         self.docker_name = uuid.uuid4()
+        self.visible_gpu_devices = visible_gpu_devices
 
     def get_docker_cmd(self, main_cmd, extra_args='', use_tty=True, verbose=True, pythonpath=None, pre_cmd=None, post_cmd=None,
             checkpoint=False, no_root=False):
@@ -106,6 +110,11 @@ class DockerMode(LaunchMode):
             docker_prefix = 'docker run %s -ti %s /bin/bash -c ' % (extra_args, self.docker_image)
         else:
             docker_prefix = 'docker run %s %s /bin/bash -c ' % (extra_args, self.docker_image)
+
+        if len(self.visible_gpu_devices) != 0:
+            docker_prefix = 'nvidia-' + docker_prefix  # require nvidia-docker to be part of 
+            docker_prefix = 'NV_GPU=\'%s\' ' % ','.join(map(str, self.visible_gpu_devices)) + docker_prefix
+
         main_cmd = cmd_list.to_string()
         full_cmd = docker_prefix + ("\'%s\'" % main_cmd)
         return full_cmd
