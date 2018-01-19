@@ -10,10 +10,12 @@ def launch_shell(
     mode=LOCAL,
     dry=False,
     mount_points=None,
+    port=None,
+    root=False,
     ):
     if mount_points is None:
         mount_points = []
-    mode.launch_command(command, dry=dry)
+    mode.launch_command(command, mount_points=mount_points, dry=dry, port=port, root=root)
 
 
 def launch_python(
@@ -23,6 +25,7 @@ def launch_python(
     mount_points=None,
     pdb_post_mortem=False,
     args=None,
+    use_tty=True,
     env=None,
     dry=False,
     fake_display=False,
@@ -47,7 +50,7 @@ def launch_python(
     target_full_path = os.path.join(target_mount.docker_mount_dir(), os.path.basename(target))
 
     command = make_python_command(target_full_path, args=args, python_cmd=python_cmd, fake_display=fake_display)
-    mode.launch_command(command, mount_points=mount_points, dry=dry, verbose=verbose)
+    mode.launch_command(command, mount_points=mount_points, dry=dry, verbose=verbose, use_tty=use_tty)
 
 HEADLESS = 'xvfb-run -a -s "-ac -screen 0 1400x900x24 +extension RANDR"'
 def make_python_command(target, python_cmd='python', args=None, fake_display=False):

@@ -111,7 +111,8 @@ class DockerMode(LaunchMode):
         else:
             docker_prefix = 'docker run %s %s /bin/bash -c ' % (extra_args, self.docker_image)
 
-        if len(self.visible_gpu_devices) != 0:
+        if self.visible_gpu_devices is not None and len(self.visible_gpu_devices) != 0:
+            # for now just make nvidia-docker default
             docker_prefix = 'nvidia-' + docker_prefix  # require nvidia-docker to be part of 
             docker_prefix = 'NV_GPU=\'%s\' ' % ','.join(map(str, self.visible_gpu_devices)) + docker_prefix
 
@@ -125,7 +126,7 @@ class LocalDocker(DockerMode):
         super(LocalDocker, self).__init__(**kwargs)
         self.checkpoints = checkpoints
 
-    def launch_command(self, cmd, mount_points=None, dry=False, verbose=False):
+    def launch_command(self, cmd, mount_points=None, dry=False, verbose=False, port=None, root=False, use_tty=True):
         mnt_args = ''
         py_path = []
         for mount in mount_points:
@@ -139,8 +140,11 @@ class LocalDocker(DockerMode):
             else:
                 raise NotImplementedError()
 
-        full_cmd = self.get_docker_cmd(cmd, extra_args=mnt_args, pythonpath=py_path, 
-                checkpoint=self.checkpoints)
+        if port is not None:
+            mnt_args += ' -p %s:%s' % (port, port)
+
+        full_cmd = self.get_docker_cmd(cmd, extra_args=mnt_args, pythonpath=py_path, use_tty=use_tty,
+                checkpoint=self.checkpoints, no_root=not(root))
         if verbose:
             print(full_cmd)
         call_and_wait(full_cmd, dry=dry)
@@ -156,7 +160,7 @@ class SSHDocker(DockerMode):
         self.tmp_dir = os.path.join(SSHDocker.TMP_DIR, self.run_id)
         self.checkpoint = None
 
-    def launch_command(self, main_cmd, mount_points=None, dry=False, verbose=False):
+    def launch_command(self, main_cmd, mount_points=None, dry=False, verbose=False, use_tty=True):
         py_path = []
         remote_cmds = CommandBuilder()
         remote_cleanup_commands = CommandBuilder()
@@ -269,7 +273,7 @@ class EC2SpotDocker(DockerMode):
     def make_timekey(self):
         return '_%d'%(int(time.time()*1000))
 
-    def launch_command(self, main_cmd, mount_points=None, dry=False, verbose=False):
+    def launch_command(self, main_cmd, mount_points=None, dry=False, verbose=False, use_tty=False):
         #dry=True #DRY
 
         default_config = dict(
@@ -407,8 +411,8 @@ class EC2SpotDocker(DockerMode):
 
         if verbose:
             print(full_script)
-        #with open("/tmp/full_script", "w") as f:
-        #    f.write(full_script)
+        with open("/tmp/full_script", "w") as f:
+            f.write(full_script)
 
         instance_args = dict(
             ImageId=aws_config["image_id"],
