@@ -69,20 +69,20 @@ LOCAL = Local()
 
 
 class DockerMode(LaunchMode):
-    def __init__(self, image='ubuntu:16.04', gpu=False):
+    def __init__(self, image='ubuntu:16.04', visible_gpu_devices=[]):
         super(DockerMode, self).__init__()
         self.docker_image = image
         self.docker_name = uuid.uuid4()
-        self.gpu = gpu
+        self.visible_gpu_devices = visible_gpu_devices
 
     def get_docker_cmd(self, main_cmd, extra_args='', use_tty=True, verbose=True, pythonpath=None, pre_cmd=None, post_cmd=None,
-            checkpoint=False, no_root=False):
+            checkpoint=False, no_root=False, port=None):
         cmd_list= CommandBuilder()
         if pre_cmd:
             cmd_list.extend(pre_cmd)
 
         if verbose:
-            if self.gpu:
+            if len(self.visible_gpu_devices) != 0:
                 cmd_list.append('echo \"Running in docker (gpu)\"')
             else:
                 cmd_list.append('echo \"Running in docker\"')
@@ -113,8 +113,10 @@ class DockerMode(LaunchMode):
             docker_prefix = 'docker run %s -ti %s /bin/bash -c ' % (extra_args, self.docker_image)
         else:
             docker_prefix = 'docker run %s %s /bin/bash -c ' % (extra_args, self.docker_image)
-        if self.gpu:
+        if len(self.visible_gpu_devices) != 0:
             docker_prefix = 'nvidia-'+docker_prefix
+            docker_prefix = 'NV_GPU=\'%s\' ' % ','.join(map(str, self.visible_gpu_devices)) + docker_prefix
+
         main_cmd = cmd_list.to_string()
         full_cmd = docker_prefix + ("\'%s\'" % main_cmd)
         return full_cmd
@@ -125,7 +127,7 @@ class LocalDocker(DockerMode):
         super(LocalDocker, self).__init__(**kwargs)
         self.checkpoints = checkpoints
 
-    def launch_command(self, cmd, mount_points=None, dry=False, verbose=False):
+    def launch_command(self, cmd, mount_points=None, dry=False, verbose=False, port=None, root=False, use_tty=True):
         mnt_args = ''
         py_path = []
         for mount in mount_points:
@@ -139,8 +141,11 @@ class LocalDocker(DockerMode):
             else:
                 raise NotImplementedError(type(mount))
 
-        full_cmd = self.get_docker_cmd(cmd, extra_args=mnt_args, pythonpath=py_path,
-                checkpoint=self.checkpoints)
+        if port is not None:
+            mnt_args += ' -p %s:%s' % (port, port)
+
+        full_cmd = self.get_docker_cmd(cmd, extra_args=mnt_args, pythonpath=py_path, use_tty=use_tty,
+                checkpoint=self.checkpoints, port=port, no_root=not(root))
         if verbose:
             print(full_cmd)
         call_and_wait(full_cmd, dry=dry)
@@ -417,7 +422,7 @@ class EC2SpotDocker(DockerMode):
         sio.write("aws ec2 create-tags --resources $EC2_INSTANCE_ID --tags Key=Name,Value={exp_name} --region {aws_region}\n".format(
             exp_name=exp_name, aws_region=self.region))
 
-        if self.gpu:
+        if len(self.visible_gpu_devices) != 0:
             #sio.write('echo "LSMOD NVIDIA:"\n')
             #sio.write("lsmod | grep nvidia\n")
             #sio.write("echo 'Waiting for dpkg lock...'\n")
@@ -571,8 +576,8 @@ class EC2AutoconfigDocker(EC2SpotDocker):
                 iam_instance_profile_name=iam_profile,
                 credentials=credentials,
                 region=region,
-                security_groups=security_groups,
-                security_group_ids=security_group_ids,
+                #security_groups=security_groups,
+                #security_group_ids=security_group_ids,
                 **kwargs
                 )
 
