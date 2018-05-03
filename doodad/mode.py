@@ -69,11 +69,12 @@ LOCAL = Local()
 
 
 class DockerMode(LaunchMode):
-    def __init__(self, image='ubuntu:16.04', visible_gpu_devices=[]):
+    def __init__(self, image='ubuntu:16.04', visible_gpu_devices=[], docker2=False):
         super(DockerMode, self).__init__()
         self.docker_image = image
         self.docker_name = uuid.uuid4()
         self.visible_gpu_devices = visible_gpu_devices
+        self.docker2 = docker2
 
     def get_docker_cmd(self, main_cmd, extra_args='', use_tty=True, verbose=True, pythonpath=None, pre_cmd=None, post_cmd=None,
             checkpoint=False, no_root=False, port=None):
@@ -82,8 +83,8 @@ class DockerMode(LaunchMode):
             cmd_list.extend(pre_cmd)
 
         if verbose:
-            if len(self.visible_gpu_devices) != 0:
-                cmd_list.append('echo \"Running in docker (gpu)\"')
+            if self.visible_gpu_devices is not None and len(self.visible_gpu_devices) != 0:
+                cmd_list.append('echo \"Running in docker with gpu\"')
             else:
                 cmd_list.append('echo \"Running in docker\"')
         if pythonpath:
@@ -108,14 +109,21 @@ class DockerMode(LaunchMode):
             # set up checkpoint stuff
             use_tty = False
             extra_args += ' -d '  # detach is optional
+        
+        if self.docker2:
+            extra_args += ' --runtime=nvidia'
+            if self.visible_gpu_devices is not None and len(self.visible_gpu_devices) != 0:
+                extra_args += ' -e NVIDIA_VISIBLE_DEVICES=%s ' % ','.join(map(str, self.visible_gpu_devices))
 
         if use_tty:
             docker_prefix = 'docker run %s -ti %s /bin/bash -c ' % (extra_args, self.docker_image)
         else:
             docker_prefix = 'docker run %s %s /bin/bash -c ' % (extra_args, self.docker_image)
-        if len(self.visible_gpu_devices) != 0:
-            docker_prefix = 'nvidia-'+docker_prefix
-            docker_prefix = 'NV_GPU=\'%s\' ' % ','.join(map(str, self.visible_gpu_devices)) + docker_prefix
+
+        if self.visible_gpu_devices is not None and len(self.visible_gpu_devices) != 0:
+            if not self.docker2:
+                docker_prefix = 'nvidia-'+docker_prefix
+                docker_prefix = 'NV_GPU=%s ' % ','.join(map(str, self.visible_gpu_devices)) + docker_prefix
 
         main_cmd = cmd_list.to_string()
         full_cmd = docker_prefix + ("\'%s\'" % main_cmd)
@@ -161,7 +169,7 @@ class SSHDocker(DockerMode):
         self.tmp_dir = os.path.join(SSHDocker.TMP_DIR, self.run_id)
         self.checkpoint = None
 
-    def launch_command(self, main_cmd, mount_points=None, dry=False, verbose=False):
+    def launch_command(self, main_cmd, mount_points=None, dry=False, verbose=False, use_tty=False):
         py_path = []
         remote_cmds = CommandBuilder()
         remote_cleanup_commands = CommandBuilder()
@@ -203,6 +211,8 @@ class SSHDocker(DockerMode):
         else:
             docker_cmd = self.get_docker_cmd(main_cmd, use_tty=False, extra_args=mnt_args, pythonpath=py_path)
 
+        if verbose:
+            print(docker_cmd)
 
         remote_cmds.append(docker_cmd)
         remote_cmds.extend(remote_cleanup_commands)
@@ -286,7 +296,7 @@ class EC2SpotDocker(DockerMode):
     def make_timekey(self):
         return '%d'%(int(time.time()*1000))
 
-    def launch_command(self, main_cmd, mount_points=None, dry=False, verbose=False):
+    def launch_command(self, main_cmd, mount_points=None, dry=False, use_tty=False, verbose=False):
         default_config = dict(
             image_id=self.image_id,
             instance_type=self.instance_type,

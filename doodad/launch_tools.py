@@ -26,10 +26,13 @@ def launch_python(
         args=None,
         env=None,
         dry=False,
+        cmd_args=None,
         fake_display=False,
         target_mount_dir='target',
         verbose=False,
         use_cloudpickle=False,
+        use_tty=False,
+        pdb_post_mortem=False,
         target_mount=None,
 ):
     """
@@ -70,10 +73,14 @@ def launch_python(
         target_full_path,
         args=args,
         python_cmd=python_cmd,
+        pdb_post_mortem=pdb_post_mortem,
         fake_display=fake_display,
         use_cloudpickle=use_cloudpickle,
     )
-    mode.launch_command(command, mount_points=mount_points, dry=dry, verbose=verbose)
+    if verbose and cmd_args is not None:
+        print (command + cmd_args)
+        command = command + cmd_args
+    mode.launch_command(command, mount_points=mount_points, dry=dry, verbose=verbose, use_tty=use_tty)
     return target_mount
 
 HEADLESS = 'xvfb-run -a -s "-ac -screen 0 1400x900x24 +extension RANDR"'
@@ -81,9 +88,13 @@ def make_python_command(
         target,
         python_cmd='python',
         args=None,
+        pdb_post_mortem=False,
         fake_display=False,
         use_cloudpickle=False,
 ):
+
+    if pdb_post_mortem:
+        python_cmd += ' -m pdb'
 
     if fake_display:
         cmd = '{headless} {python_cmd} {target}'.format(headless=HEADLESS, python_cmd=python_cmd, target=target)
